@@ -44,3 +44,74 @@ p <- ggplot(map.world) +
            legend.position="bottom") +
      ggtitle(paste0(indicatorName, " in ", indicatorYear))
 ggsave("map.png", p, width=7, height=4, units="in")
+
+
+
+
+
+# Ranknig by S&P Performance
+library(readr)
+library(dplyr)
+library(ggplot2)
+
+db <- read_csv("../input/Indicators.csv")
+
+db %>% 
+filter(IndicatorCode == "CM.MKT.INDX.ZG") -> mData
+
+# Filter for countries w/ complete datasets
+mData %>% 
+  filter(Year == 1990) %>% 
+  select(CountryCode) -> conSet
+
+cData = left_join(conSet, mData, by = "CountryCode")
+
+#' Calculate Cummulative % Growth
+cData %>%
+  group_by(CountryCode) %>% 
+  mutate(Growth = 1 + Value / 100) %>% 
+  mutate(CumGrowth = cumprod(Growth)) %>% 
+  ungroup() %>% 
+  select(CountryName, Year, CumGrowth) -> growth
+
+# Modify start point for consistency between plots
+start = as.data.frame(cbind(unique(growth$CountryName), rep(1989, 21), 
+                            rep(1, 21)), stringsAsFactors = FALSE)
+colnames(start) = colnames(growth)
+start$Year = as.integer(start$Year)
+start$CumGrowth = as.numeric(start$CumGrowth)
+growth = rbind(start, growth)
+
+#' Sort for 10 best performing countries
+growth %>% 
+  filter(Year == 2014) %>% 
+  arrange(desc(CumGrowth)) %>% 
+  select(CountryName) %>% 
+  slice(1:10) -> top5Cont
+
+top5 = left_join(top5Cont, growth, "CountryName")
+
+#' Sort for 10 worst performing countries
+growth %>% 
+  filter(Year == 2014) %>% 
+  arrange(CumGrowth) %>% 
+  select(CountryName) %>% 
+  slice(1:10) -> bot5Cont
+
+bot5 = left_join(bot5Cont, growth, "CountryName")
+
+# Plotting top 10 countries
+print(ggplot(data=top5, 
+             aes(x=Year, y=(CumGrowth - 1) * 100, 
+                 group=CountryName, colour=CountryName)) + 
+      geom_line(size = 1.2) + 
+      ggtitle("Top 10 Performing S&P Global Equity Indices") + 
+      ylab("Cummulative Percentage Growth"))
+
+# Plotting worst 10 countries
+print(ggplot(data=bot5, 
+      aes(x=Year, y=(CumGrowth - 1) * 100, 
+          group=CountryName, colour=CountryName)) + 
+      geom_line(size = 1.2) + 
+      ggtitle("10 Worst Performing S&P Global Equity Indices") + 
+      ylab("Cummulative Percentage Growth"))
